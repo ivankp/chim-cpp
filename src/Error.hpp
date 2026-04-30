@@ -6,9 +6,10 @@
 
 #include <errno.h>
 
-struct Error : std::exception {
+class Error : public std::exception {
     std::string message;
 
+public:
     struct code_t { } static code;
 
     void operator()(code_t, const auto&... args) noexcept {

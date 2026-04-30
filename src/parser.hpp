@@ -2,7 +2,7 @@
 
 #include "Mmapped.hpp"
 
-class ParsedMod : Mmapped {
+class Mod : Mmapped {
 public:
-    ParsedMod(const char* path);
+    Mod(const char* path);
 };

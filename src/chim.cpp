@@ -11,7 +11,6 @@ using std::filesystem::path;
 using strings::cat;
 
 namespace strings {
-
 template <>
 struct ViewADL<path> {
     static auto view(const path& p) noexcept {
@@ -22,7 +21,6 @@ struct ViewADL<path> {
         }
     }
 };
-
 }
 
 int main(int argc, char** argv) {
@@ -34,7 +32,7 @@ int main(int argc, char** argv) {
             return 1;
         }
 
-        const ParsedMod mod(argv[1]);
+        const Mod mod(argv[1]);
 
     } catch (...) {
         std::fputs("Terminated due to exception\n", stderr);

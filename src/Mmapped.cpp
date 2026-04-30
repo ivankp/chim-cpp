@@ -1,4 +1,4 @@
-#include "parser.hpp"
+#include "Mmapped.hpp"
 #include "Error.hpp"
 
 #include <cstdio>
@@ -17,18 +17,18 @@ Mmapped::Mmapped(const char* path) : path(path) {
 
     fd = ::open(path, O_RDONLY);
     if (fd == -1) {
-        error(Error::code, "open(", path, ')');
+        error(Error::code, "open(\"", path, "\")");
         goto err;
     }
 
     struct stat sb;
     if (::fstat(fd, &sb) == -1) {
-        error(Error::code, "fstat(", path, ')');
+        error(Error::code, "fstat(\"", path, "\")");
         goto close;
     }
 
     if (!S_ISREG(sb.st_mode)) {
-        error(path, " is not a regular file");
+        error('\"', path, "\" is not a regular file");
         goto close;
     }
 
@@ -36,15 +36,16 @@ Mmapped::Mmapped(const char* path) : path(path) {
 
     m = reinterpret_cast<char*>(::mmap(0, size, PROT_READ, MAP_SHARED, fd, 0));
     if (m == MAP_FAILED) {
-        error(Error::code, "mmap(", path, ')');
+        error(Error::code, "mmap(\"", path, "\")");
         goto close;
     }
 
     return;
 
 close:
-    if (::close(fd) == -1)
-        error(Error::code, "close(", path, ')');
+    if (::close(fd) == -1) {
+        error(Error::code, "close(\"", path, "\")");
+    }
 
 err:
     throw error;

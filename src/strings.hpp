@@ -44,11 +44,7 @@ inline constexpr decltype(auto) view(const T& x) noexcept {
     if constexpr (requires { ViewADL<T>::view(x); }) {
         return ViewADL<T>::view(x);
     } else if constexpr (std::is_same_v<T, bool>) {
-        if (x) {
-            return std::string_view("true", 4);
-        } else {
-            return std::string_view("false", 5);
-        }
+        return std::string_view(x ? "true" : "false");
     } else if constexpr (std::is_same_v<T, char>) {
         return std::string_view(&x, 1);
     } else if constexpr (std::is_arithmetic_v<T>) {

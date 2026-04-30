@@ -4,5 +4,5 @@
 
 class Mod : Mmapped {
 public:
-    Mod(const char* path);
+    Mod(const std::filesystem::path&);
 };

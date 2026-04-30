@@ -1,3 +1,3 @@
 #include "parser.hpp"
 
-Mod::Mod(const char* path) : Mmapped(path) { }
+Mod::Mod(const std::filesystem::path& path) : Mmapped(path) { }

@@ -1,14 +1,14 @@
 #pragma once
 
-#include <cstddef>
+#include <filesystem>
 
 class Mmapped {
-    const char* path;
+    const std::filesystem::path path;
     int fd;
     char* m;
     size_t size;
 
 public:
-    Mmapped(const char* path);
+    Mmapped(const std::filesystem::path&);
     ~Mmapped();
 };

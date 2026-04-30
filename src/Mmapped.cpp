@@ -10,12 +10,26 @@
 #include <unistd.h>
 #include <sys/mman.h>
 
-Mmapped::Mmapped(const char* path) : path(path) {
+namespace strings {
+using std::filesystem::path;
+template <>
+struct ViewADL<path> {
+    static auto view(const path& p) noexcept {
+        if constexpr (std::is_same_v<std::string, typename path::string_type>) {
+            return std::string_view(p.native());
+        } else {
+            return p.string();
+        }
+    }
+};
+}
+
+Mmapped::Mmapped(const std::filesystem::path& path) : path(path) {
     // https://www.oreilly.com/library/view/linux-system-programming/0596009585/ch04s03.html
 
     Error error;
 
-    fd = ::open(path, O_RDONLY);
+    fd = ::open(path.c_str(), O_RDONLY);
     if (fd == -1) {
         error(Error::code, "open(\"", path, "\")");
         goto err;

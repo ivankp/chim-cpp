@@ -63,8 +63,13 @@ inline constexpr std::string cat() noexcept {
 }
 
 [[nodiscard]]
-inline constexpr std::string cat(std::string x) noexcept {
+inline constexpr std::string cat(const std::string& x) noexcept {
     return x;
+}
+
+[[nodiscard]]
+inline constexpr std::string cat(std::string&& x) noexcept {
+    return std::move(x);
 }
 
 [[nodiscard]]

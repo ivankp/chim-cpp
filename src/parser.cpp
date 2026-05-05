@@ -1,21 +1,11 @@
 #include "parser.hpp"
-// #include "strings.hpp"
 
-// #include <iostream>
-// #include <vector>
 #include <cstdio>
-#include <generator>
 #include <sstream>
+#include <string_view>
+#include <cstring>
 
 #include <unistd.h>
-
-// using strings::cat;
-//
-// void Print(const auto&... args) {
-//     std::puts(cat(args...).c_str());
-// }
-
-// using std::cout, std::endl;
 
 struct Subrecord {
     char name[4];
@@ -29,61 +19,42 @@ struct Subrecord {
 struct Record {
     char name[4];
     uint32_t size;
-    uint32_t header;
-    uint32_t flags;
+    uint32_t flags[2];
 
     std::string_view Name() const noexcept {
         return { name, sizeof(name) };
     }
-
-    std::generator<Subrecord&> Subrecords() const {
-        char* ptr = reinterpret_cast<char*>(const_cast<Record*>(this)) + sizeof(Record);
-        const char* const end = ptr + size;
-        while (ptr < end) {
-            if (end - ptr < sizeof(Subrecord))
-                throw std::runtime_error("Not enough data for subrecord header");
-            Subrecord* subrecord = reinterpret_cast<Subrecord*>(ptr);
-            ptr += sizeof(Subrecord);
-            if (end - ptr < subrecord->size)
-                throw std::runtime_error("Not enough data for subrecord data");
-            ptr += subrecord->size;
-            co_yield *subrecord;
-        }
-    }
 };
 
-std::generator<Record&> Records(char* ptr, const char* end) {
-    while (ptr < end) {
-        // if (reinterpret_cast<std::uintptr_t>(ptr) % alignof(Record) != 0) {
-        //     throw std::runtime_error("Record pointer is not aligned");
-        // }
-        if (end - ptr < sizeof(Record))
-            throw std::runtime_error("Not enough data for record header");
-        Record* record = reinterpret_cast<Record*>(ptr);
-        ptr += sizeof(Record);
-        if (end - ptr < record->size)
-            throw std::runtime_error("Not enough data for record data");
-        ptr += record->size;
-        co_yield *record;
-    }
-}
-
 Mod::Mod(const std::filesystem::path& path) : Mmapped(path) {
-    // std::ios_base::sync_with_stdio(false);
     std::stringstream xml;
     if (std::string_view(m, size).starts_with("TES3")) {
-        const char* fileEnd = m + size;
-        for (Record& record : Records(m, m + size)) {
-            // Print(record.Name(), ' ', record.size);
+        Record record;
+        Subrecord subrecord;
+        for (const char *ptr = m, *const end = m + size; ptr < end; ) {
+            if (end - ptr < sizeof(Record))
+                throw std::runtime_error("Not enough data for record header");
+            std::memcpy(&record, ptr, sizeof(Record));
+            ptr += sizeof(Record);
+            if (end - ptr < record.size)
+                throw std::runtime_error("Not enough data for record data");
+
             xml << '<' << record.Name() << " size=\"" << record.size << '\"';
-            if (record.header != 0)
-                xml << " header=\"" << std::hex << record.header << std::dec << '\"';
-            if (record.flags != 0)
-                xml << " flags=\"" << std::hex << record.flags << std::dec << '\"';
+            if (record.flags[0] || record.flags[1])
+                xml << " flags=\"" << std::hex
+                    << record.flags[0] << ',' << record.flags[1]
+                    << std::dec << '\"';
             xml << ">\n";
 
-            for (Subrecord& subrecord : record.Subrecords()) {
-                // Print("  ", subrecord.Name(), ' ', subrecord.size);
+            for (const char *const end = ptr + record.size; ptr < end; ) {
+                if (end - ptr < sizeof(Subrecord))
+                    throw std::runtime_error("Not enough data for subrecord header");
+                std::memcpy(&subrecord, ptr, sizeof(Subrecord));
+                ptr += sizeof(Subrecord);
+                if (end - ptr < subrecord.size)
+                    throw std::runtime_error("Not enough data for subrecord data");
+                ptr += subrecord.size;
+
                 xml << "  <" << subrecord.Name() << " size=\"" << subrecord.size << '\"';
                 xml << ">\n";
 

@@ -4,8 +4,11 @@
 #include <sstream>
 #include <string_view>
 #include <cstring>
+#include <iostream>
 
 #include <unistd.h>
+
+using std::cout;
 
 struct Subrecord {
     char name[4];
@@ -27,7 +30,14 @@ struct Record {
 };
 
 Mod::Mod(const std::filesystem::path& path) : Mmapped(path) {
-    std::stringstream xml;
+    char hexLine[8 * (8 + 1) + 2];
+    hexLine[0] = ' ';
+    for (unsigned i = 1; i < sizeof(hexLine); i += 9) {
+        hexLine[i] = ' ';
+    }
+    hexLine[sizeof(hexLine) - 1] = '\n';
+
+    std::stringstream out;
     if (std::string_view(m, size).starts_with("TES3")) {
         Record record;
         Subrecord subrecord;
@@ -39,32 +49,40 @@ Mod::Mod(const std::filesystem::path& path) : Mmapped(path) {
             if (end - ptr < record.size)
                 throw std::runtime_error("Not enough data for record data");
 
-            xml << '<' << record.Name() << " size=\"" << record.size << '\"';
-            if (record.flags[0] || record.flags[1])
-                xml << " flags=\"" << std::hex
-                    << record.flags[0] << ',' << record.flags[1]
-                    << std::dec << '\"';
-            xml << ">\n";
+            out << record.Name() << ' ' << record.size << ' '
+                << std::hex
+                << record.flags[0] << ' ' << record.flags[1]
+                << std::dec << '\n';
 
-            for (const char *const end = ptr + record.size; ptr < end; ) {
+            for (const auto end = ptr + record.size; ptr < end; ) {
                 if (end - ptr < sizeof(Subrecord))
                     throw std::runtime_error("Not enough data for subrecord header");
                 std::memcpy(&subrecord, ptr, sizeof(Subrecord));
                 ptr += sizeof(Subrecord);
                 if (end - ptr < subrecord.size)
                     throw std::runtime_error("Not enough data for subrecord data");
-                ptr += subrecord.size;
 
-                xml << "  <" << subrecord.Name() << " size=\"" << subrecord.size << '\"';
-                xml << ">\n";
+                out << ' ' << subrecord.Name() << ' ' << subrecord.size << '\n';
 
-
-                xml << "  </" << subrecord.Name() << ">\n";
+                unsigned i = 1;
+                for (const auto end = ptr + subrecord.size; ptr < end; ++ptr) {
+                    const uint8_t byte = *reinterpret_cast<const uint8_t*>(ptr);
+                    uint8_t half = byte >> 4;
+                    hexLine[++i] = (half < 10 ? '0' + half : 'A' - 10 + half);
+                    half = byte & 0x0F;
+                    hexLine[++i] = (half < 10 ? '0' + half : 'A' - 10 + half);
+                    if (!(i % 9))
+                        ++i;
+                    if (i == sizeof(hexLine) - 1) {
+                        out.write(hexLine, sizeof(hexLine));
+                        i = 1;
+                    }
+                }
+                if (i > 1)
+                    out.write(hexLine, i + 1) << '\n';
             }
-
-            xml << "</" << record.Name() << ">\n";
         }
     }
-    const auto view = xml.rdbuf()->view();
+    const auto view = out.rdbuf()->view();
     write(1, view.data(), view.size());
 }

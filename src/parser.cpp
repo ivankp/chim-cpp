@@ -1,10 +1,13 @@
 #include "parser.hpp"
 // #include "strings.hpp"
 
-#include <iostream>
+// #include <iostream>
 // #include <vector>
 #include <cstdio>
 #include <generator>
+#include <sstream>
+
+#include <unistd.h>
 
 // using strings::cat;
 //
@@ -12,7 +15,7 @@
 //     std::puts(cat(args...).c_str());
 // }
 
-using std::cout, std::endl;
+// using std::cout, std::endl;
 
 struct Subrecord {
     char name[4];
@@ -66,27 +69,31 @@ std::generator<Record&> Records(char* ptr, const char* end) {
 }
 
 Mod::Mod(const std::filesystem::path& path) : Mmapped(path) {
+    // std::ios_base::sync_with_stdio(false);
+    std::stringstream xml;
     if (std::string_view(m, size).starts_with("TES3")) {
         const char* fileEnd = m + size;
         for (Record& record : Records(m, m + size)) {
             // Print(record.Name(), ' ', record.size);
-            cout << '<' << record.Name() << " size=\"" << record.size << '\"';
+            xml << '<' << record.Name() << " size=\"" << record.size << '\"';
             if (record.header != 0)
-                cout << " header=\"" << std::hex << record.header << std::dec << '\"';
+                xml << " header=\"" << std::hex << record.header << std::dec << '\"';
             if (record.flags != 0)
-                cout << " flags=\"" << std::hex << record.flags << std::dec << '\"';
-            cout << ">\n";
+                xml << " flags=\"" << std::hex << record.flags << std::dec << '\"';
+            xml << ">\n";
 
             for (Subrecord& subrecord : record.Subrecords()) {
                 // Print("  ", subrecord.Name(), ' ', subrecord.size);
-                cout << "  <" << subrecord.Name() << " size=\"" << subrecord.size << '\"';
-                cout << ">\n";
+                xml << "  <" << subrecord.Name() << " size=\"" << subrecord.size << '\"';
+                xml << ">\n";
 
 
-                cout << "  </" << subrecord.Name() << ">\n";
+                xml << "  </" << subrecord.Name() << ">\n";
             }
 
-            cout << "</" << record.Name() << ">\n";
+            xml << "</" << record.Name() << ">\n";
         }
     }
+    const auto view = xml.rdbuf()->view();
+    write(1, view.data(), view.size());
 }

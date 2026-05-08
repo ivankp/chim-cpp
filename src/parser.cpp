@@ -5,6 +5,7 @@
 #include <string_view>
 #include <cstring>
 #include <iostream>
+#include <algorithm>
 
 #include <unistd.h>
 
@@ -30,11 +31,8 @@ struct Record {
 };
 
 Mod::Mod(const std::filesystem::path& path) : Mmapped(path) {
-    char hexLine[8 * (8 + 1) + 2];
-    hexLine[0] = ' ';
-    for (unsigned i = 1; i < sizeof(hexLine); i += 9) {
-        hexLine[i] = ' ';
-    }
+    char hexLine[8 * (8 + 1) + 3];
+    std::memset(hexLine, ' ', sizeof(hexLine)-1);
     hexLine[sizeof(hexLine) - 1] = '\n';
 
     std::stringstream out;
@@ -64,22 +62,44 @@ Mod::Mod(const std::filesystem::path& path) : Mmapped(path) {
 
                 out << ' ' << subrecord.Name() << ' ' << subrecord.size << '\n';
 
-                unsigned i = 1;
-                for (const auto end = ptr + subrecord.size; ptr < end; ++ptr) {
-                    const uint8_t byte = *reinterpret_cast<const uint8_t*>(ptr);
-                    uint8_t half = byte >> 4;
-                    hexLine[++i] = (half < 10 ? '0' + half : 'A' - 10 + half);
-                    half = byte & 0x0F;
-                    hexLine[++i] = (half < 10 ? '0' + half : 'A' - 10 + half);
-                    if (!(i % 9))
-                        ++i;
-                    if (i == sizeof(hexLine) - 1) {
-                        out.write(hexLine, sizeof(hexLine));
-                        i = 1;
+                const char* const dataEnd = ptr + subrecord.size;
+                const char* dataEnd2 = dataEnd - 1; // without trailing \0
+                for (; dataEnd2 >= ptr; --dataEnd2) {
+                    if (*dataEnd2 != '\0') {
+                        break;
                     }
                 }
-                if (i > 1)
-                    out.write(hexLine, i + 1) << '\n';
+                ++dataEnd2;
+
+                if (dataEnd2 - ptr > 2 && std::all_of(ptr, dataEnd2, [](char c) {
+                    return ('\x19' < c && c < '\x7F')
+                        || c == ' ' || c == '\t' || c == '\n' || c == '\r';
+                })) { // Text
+                    out << "  str\n   ";
+                    out.write(ptr, subrecord.size);
+                    out << '\n';
+                    ptr += subrecord.size;
+                } else {
+                    out << "  hex\n";
+                    unsigned i = 2;
+                    if (ptr < dataEnd) for (;;) {
+                        const uint8_t byte = *reinterpret_cast<const uint8_t*>(ptr);
+                        uint8_t half = byte >> 4;
+                        hexLine[++i] = (half < 10 ? '0' + half : 'A' - 10 + half);
+                        half = byte & 0x0F;
+                        hexLine[++i] = (half < 10 ? '0' + half : 'A' - 10 + half);
+                        if (++ptr == dataEnd) {
+                            out.write(hexLine, i + 1) << '\n';
+                            break;
+                        }
+                        if (!((i - 1) % 9))
+                            ++i;
+                        if (i == sizeof(hexLine) - 1) {
+                            out.write(hexLine, sizeof(hexLine));
+                            i = 2;
+                        }
+                    }
+                }
             }
         }
     }

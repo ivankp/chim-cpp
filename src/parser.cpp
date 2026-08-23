@@ -92,7 +92,6 @@ struct Record {
 void WriteAscii(std::ostream& out, const char* m, const char* end) {
     out << "  str\n   ";
     char c;
-    unsigned s = 0;
     for (; m < end; ++m) {
         c = *m;
 next:
@@ -101,18 +100,13 @@ next:
         } else switch (c) {
             case ' ':
                 for (;;) {
-                    ++s;
                     if (++m == end) {
-                        do {
-                            out << "\\s";
-                        } while (--s);
+                        out << "\\s";
                         return;
                     }
+                    out << ' ';
                     c = *m;
                     if (c != ' ') {
-                        do {
-                            out << ' ';
-                        } while (--s);
                         goto next;
                     }
                 }

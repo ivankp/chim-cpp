@@ -9,6 +9,10 @@
 
 #include <unistd.h>
 
+#include <map>
+#include <set>
+#include <fstream>
+
 namespace {
 
 constexpr char HexHalf(unsigned char half) noexcept {
@@ -94,7 +98,7 @@ void WriteAscii(std::ostream& out, const char* m, const char* end) {
     for (; m < end; ++m) {
         c = *m;
 next:
-        if ('!' <= c && c <= '~') { [[ likely ]]
+        if ('!' <= c && c <= '~' && c != '\\') { [[ likely ]]
             out << c;
         } else switch (c) {
             case ' ':
@@ -132,6 +136,8 @@ next:
     }
 }
 
+std::map<std::string, std::set<std::string>> tags;
+
 Mod::Mod(const std::filesystem::path& path) : Mmapped(path) {
     char hexLine[8 * (8 + 1) + 3];
     std::memset(hexLine, ' ', sizeof(hexLine)-1);
@@ -147,10 +153,14 @@ Mod::Mod(const std::filesystem::path& path) : Mmapped(path) {
             ptr = record.ReadEs(ptr, endFile);
             record.WriteText(out);
 
+            auto& tagsRec = tags[std::string(record.name, 4)];
+
             const char* const endRec = ptr + record.size;
             while (ptr < endRec) {
                 ptr = subrecord.ReadEs(ptr, endRec);
                 subrecord.WriteText(out);
+
+                tagsRec.insert(std::string(subrecord.name, 4));
 
                 if (subrecord.size == 0)
                     continue;
@@ -158,14 +168,13 @@ Mod::Mod(const std::filesystem::path& path) : Mmapped(path) {
                 const char* const endSub = ptr + subrecord.size;
                 if (const char* endTxt = IsAsciiText(ptr, endSub)) {
                     out << "  str\n   ";
-                    if (ptr == endTxt) { [[ unlikely ]]
-                        out << "\\0";
-                        return;
-                    } else {
+                    if (ptr != endTxt) {
                         WriteAscii(out, ptr, endTxt);
-                        out << '\n';
-                        ptr += subrecord.size;
+                    } else { [[ unlikely ]]
+                        out << "\\0";
                     }
+                    out << '\n';
+                    ptr += subrecord.size;
                 } else {
                     out << "  hex\n";
                     unsigned i = 2;
@@ -190,4 +199,12 @@ Mod::Mod(const std::filesystem::path& path) : Mmapped(path) {
     }
     const auto view = out.rdbuf()->view();
     write(1, view.data(), view.size());
+
+    std::ofstream tagsOut("tags.txt");
+    for (const auto& [rec, subs] : tags) {
+        tagsOut << rec << '\n';
+        for (const auto& sub : subs) {
+            tagsOut << "  " << sub << '\n';
+        }
+    }
 }

@@ -90,7 +90,6 @@ struct Record {
 };
 
 void WriteAscii(std::ostream& out, const char* m, const char* end) {
-    out << "  str\n   ";
     char c;
     for (; m < end; ++m) {
         c = *m;
@@ -153,11 +152,20 @@ Mod::Mod(const std::filesystem::path& path) : Mmapped(path) {
                 ptr = subrecord.ReadEs(ptr, endRec);
                 subrecord.WriteText(out);
 
+                if (subrecord.size == 0)
+                    continue;
+
                 const char* const endSub = ptr + subrecord.size;
                 if (const char* endTxt = IsAsciiText(ptr, endSub)) {
-                    WriteAscii(out, ptr, endTxt);
-                    out << '\n';
-                    ptr += subrecord.size;
+                    out << "  str\n   ";
+                    if (ptr == endTxt) { [[ unlikely ]]
+                        out << "\\0";
+                        return;
+                    } else {
+                        WriteAscii(out, ptr, endTxt);
+                        out << '\n';
+                        ptr += subrecord.size;
+                    }
                 } else {
                     out << "  hex\n";
                     unsigned i = 2;

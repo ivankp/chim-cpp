@@ -2,7 +2,7 @@
 
 ifeq (0, $(words $(findstring $(MAKECMDGOALS), clean))) ########################
 
-EXE := bin/chim
+EXE := bin/chim bin/test
 
 CPPSTD := c++23
 

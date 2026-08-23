@@ -9,14 +9,59 @@
 
 #include <unistd.h>
 
-using std::cout;
+namespace {
+
+constexpr char HexHalf(unsigned char half) noexcept {
+    return half + (half < '\x0A' ? '0' : 'A' - '\x0A');
+}
+
+struct Hex {
+    char c1, c2;
+    constexpr Hex(unsigned char c) noexcept
+    : c1(HexHalf(c >> 4)),
+      c2(HexHalf(c & 0x0F))
+    { }
+};
+
+const char* IsAsciiText(const char* a, const char* const end) {
+    for (;; ++a) {
+        if (!(a < end))
+            return a;
+        const char c = *a;
+        if (c == '\0')
+            break;
+        if (c > '~' || (c < ' ' && c != '\n' && c != '\r' && c != '\t'))
+            return nullptr;
+    }
+    for (const char* b = a;; ++b) {
+        if (!(b < end))
+            return a;
+        const char c = *b;
+        if (c != '\0')
+            return nullptr;
+    }
+}
+
+} // namespace
 
 struct Subrecord {
     char name[4];
     uint32_t size;
 
-    std::string_view Name() const noexcept {
-        return { name, sizeof(name) };
+    const char* ReadEs(const char* m, const char* end) {
+        if (end - m < sizeof(Subrecord))
+            throw std::runtime_error("Not enough data for subrecord header");
+        std::memcpy(this, m, sizeof(Subrecord));
+        m += sizeof(Subrecord);
+        if (end - m < size)
+            throw std::runtime_error("Not enough data for subrecord data");
+        return m;
+    }
+
+    void WriteText(std::ostream& out) const {
+        out << ' ';
+        out.write(name, sizeof(name));
+        out << ' ' << size << '\n';
     }
 };
 
@@ -25,10 +70,74 @@ struct Record {
     uint32_t size;
     uint32_t flags[2];
 
-    std::string_view Name() const noexcept {
-        return { name, sizeof(name) };
+    const char* ReadEs(const char* m, const char* end) {
+        if (end - m < sizeof(Record))
+            throw std::runtime_error("Not enough data for record header");
+        std::memcpy(this, m, sizeof(Record));
+        m += sizeof(Record);
+        if (end - m < size)
+            throw std::runtime_error("Not enough data for record data");
+        return m;
+    }
+
+    void WriteText(std::ostream& out) const {
+        out.write(name, sizeof(name));
+        out << ' ' << size << ' '
+            << std::hex
+            << flags[0] << ' ' << flags[1]
+            << std::dec << '\n';
     }
 };
+
+void WriteAscii(std::ostream& out, const char* m, const char* end) {
+    out << "  str\n   ";
+    char c;
+    unsigned s = 0;
+    for (; m < end; ++m) {
+        c = *m;
+next:
+        if ('!' <= c && c <= '~') { [[ likely ]]
+            out << c;
+        } else switch (c) {
+            case ' ':
+                for (;;) {
+                    ++s;
+                    if (++m == end) {
+                        do {
+                            out << "\\s";
+                        } while (--s);
+                        return;
+                    }
+                    c = *m;
+                    if (c != ' ') {
+                        do {
+                            out << ' ';
+                        } while (--s);
+                        goto next;
+                    }
+                }
+            case '\n':
+                out << "\\n";
+                if (m + 1 == end)
+                    return;
+                out << "\n   ";
+                break;
+            case '\r':
+                out << "\\r";
+                break;
+            case '\t':
+                out << "\\t";
+                break;
+            case '\\':
+                out << "\\\\";
+                break;
+            default:
+                out << "\\";
+                const Hex h = c;
+                out << h.c1 << h.c2;
+        }
+    }
+}
 
 Mod::Mod(const std::filesystem::path& path) : Mmapped(path) {
     char hexLine[8 * (8 + 1) + 3];
@@ -39,65 +148,39 @@ Mod::Mod(const std::filesystem::path& path) : Mmapped(path) {
     if (std::string_view(m, size).starts_with("TES3")) {
         Record record;
         Subrecord subrecord;
-        for (const char *ptr = m, *const end = m + size; ptr < end; ) {
-            if (end - ptr < sizeof(Record))
-                throw std::runtime_error("Not enough data for record header");
-            std::memcpy(&record, ptr, sizeof(Record));
-            ptr += sizeof(Record);
-            if (end - ptr < record.size)
-                throw std::runtime_error("Not enough data for record data");
+        const char *ptr = m;
+        const char* const endFile = m + size;
+        while (ptr < endFile) {
+            ptr = record.ReadEs(ptr, endFile);
+            record.WriteText(out);
 
-            out << record.Name() << ' ' << record.size << ' '
-                << std::hex
-                << record.flags[0] << ' ' << record.flags[1]
-                << std::dec << '\n';
+            const char* const endRec = ptr + record.size;
+            while (ptr < endRec) {
+                ptr = subrecord.ReadEs(ptr, endRec);
+                subrecord.WriteText(out);
 
-            for (const auto end = ptr + record.size; ptr < end; ) {
-                if (end - ptr < sizeof(Subrecord))
-                    throw std::runtime_error("Not enough data for subrecord header");
-                std::memcpy(&subrecord, ptr, sizeof(Subrecord));
-                ptr += sizeof(Subrecord);
-                if (end - ptr < subrecord.size)
-                    throw std::runtime_error("Not enough data for subrecord data");
-
-                out << ' ' << subrecord.Name() << ' ' << subrecord.size << '\n';
-
-                const char* const dataEnd = ptr + subrecord.size;
-                const char* dataEnd2 = dataEnd - 1; // without trailing \0
-                for (; dataEnd2 >= ptr; --dataEnd2) {
-                    if (*dataEnd2 != '\0') {
-                        break;
-                    }
-                }
-                ++dataEnd2;
-
-                if (dataEnd2 - ptr > 2 && std::all_of(ptr, dataEnd2, [](char c) {
-                    return ('\x19' < c && c < '\x7F')
-                        || c == ' ' || c == '\t' || c == '\n' || c == '\r';
-                })) { // Text
-                    out << "  str\n   ";
-                    out.write(ptr, subrecord.size);
+                const char* const endSub = ptr + subrecord.size;
+                if (const char* endTxt = IsAsciiText(ptr, endSub)) {
+                    WriteAscii(out, ptr, endTxt);
                     out << '\n';
                     ptr += subrecord.size;
                 } else {
                     out << "  hex\n";
                     unsigned i = 2;
-                    if (ptr < dataEnd) for (;;) {
-                        const uint8_t byte = *reinterpret_cast<const uint8_t*>(ptr);
-                        uint8_t half = byte >> 4;
-                        hexLine[++i] = (half < 10 ? '0' + half : 'A' - 10 + half);
-                        half = byte & 0x0F;
-                        hexLine[++i] = (half < 10 ? '0' + half : 'A' - 10 + half);
-                        if (++ptr == dataEnd) {
-                            out.write(hexLine, i + 1) << '\n';
-                            break;
-                        }
-                        if (!((i - 1) % 9))
-                            ++i;
-                        if (i == sizeof(hexLine) - 1) {
-                            out.write(hexLine, sizeof(hexLine));
-                            i = 2;
-                        }
+                    if (ptr < endSub) for (;;) {
+                      const Hex h = *ptr;
+                      hexLine[++i] = h.c1;
+                      hexLine[++i] = h.c2;
+                      if (++ptr == endSub) {
+                          out.write(hexLine, i + 1) << '\n';
+                          break;
+                      }
+                      if (!((i - 1) % 9))
+                          ++i;
+                      if (i == sizeof(hexLine) - 1) {
+                          out.write(hexLine, sizeof(hexLine));
+                          i = 2;
+                      }
                     }
                 }
             }

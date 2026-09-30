@@ -1,4 +1,6 @@
 #include "parser.hpp"
+#include "PosixFile.hpp"
+#include "strings.hpp"
 
 #include <cstdio>
 #include <sstream>
@@ -6,12 +8,15 @@
 #include <cstring>
 #include <iostream>
 #include <algorithm>
+#include <tuple>
+#include <map>
 
 #include <unistd.h>
 
-#include <map>
 #include <set>
 #include <fstream>
+
+using strings::cat;
 
 namespace {
 
@@ -137,6 +142,54 @@ next:
 }
 
 std::map<std::string, std::set<std::string>> tags;
+
+struct Def {
+    std::string_view type, desc;
+};
+
+const auto [ defs, defsData ] = [] {
+    std::map<std::array<char, 8>, std::vector<Def>> all;
+    std::vector<Def>* defs = nullptr;
+
+    const char* filename = "TES3.defs";
+    WholeFile f(filename);
+    const char* const end = f.m + f.size;
+    const char* a = f.m;
+    const char* b = a;
+
+    unsigned line = 0;
+    unsigned indent[3] { };
+    unsigned level = 0;
+    std::array<char, 8> tag;
+
+    for (; b < end; ++b) {
+        if (*b == ' ')
+            ++indent[level];
+        else
+            break;
+    }
+    a = b;
+    for (; b < end; ++b) {
+        switch (*b) {
+            case ' ':
+            case '\t':
+            case '\r':
+            case '\n':
+                goto tag;
+        }
+    }
+tag:
+    if (level <= 1) {
+        if (b - a != 4) throw std::runtime_error(cat(
+            filename, ':', line, ": invalid tag"
+        ));
+        std::memcpy(tag.data() + level * 4, a, 4);
+    } else {
+        defs->push_back({ { a, b }, { } });
+    }
+
+    return std::tuple(all, std::move(f));
+}();
 
 Mod::Mod(const std::filesystem::path& path) : Mmapped(path) {
     char hexLine[8 * (8 + 1) + 3];

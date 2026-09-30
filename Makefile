@@ -30,9 +30,10 @@ bin/%: .build/%.o
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) $(DEPFLAGS) -c $< -o $@
 
-bin/chim: .build/Mmapped.o .build/parser.o
+bin/chim: .build/Mmapped.o .build/PosixFile.o .build/parser.o
 
 .build/Mmapped.o: src/Mmapped.hpp src/Error.hpp src/strings.hpp
+.build/PosixFile.o: src/strings.hpp
 .build/parser.o: src/parser.hpp src/Mmapped.hpp src/Error.hpp src/strings.hpp
 
 endif ##########################################################################

@@ -1,16 +1,29 @@
 #include "PosixFile.hpp"
+#include "strings.hpp"
 
 #include <stdexcept>
 
 RecordDefs::RecordDefs(const char* path) {
     WholeFile file(path);
 
+    unsigned line = 0;
+
+    const auto err = [&](auto&&... x) {
+        throw std::runtime_error(strings::cat(
+            path, ':', line, ": ", x...
+        ));
+    };
+
     const char* const end = f.m + f.size;
     const char* a = f.m;
     const char* b = a;
 
-    unsigned level = 0, i = 0, indent[3] = { 0 };
+    static constexpr unsigned maxLevel = 4;
+    unsigned level = 0, indent = 0, indents[maxLevel] = { 0 };
     bool s = false;
+
+next_line:
+    ++line;
 
 skip_space:
     if (!(a < end))
@@ -26,41 +39,60 @@ skip_space:
             s = true;
         case '\n':
             s = false;
-            i = 0;
-            goto skip_space; // blank line
+            indent = 0;
+            goto next_line; // blank line
+            // TODO: if info, insert new line?
     }
 
     if (s)
-        goto err_indent_char;
-
-    if (!level) {
-        indent[0] = i;
-    } else {
-    }
+        err("indentation must use spaces");
 
     b = a;
 
-next:
+    if (!level) {
+        indents[0] = indent;
+        level = 1;
+    } else {
+        unsigned i = 0;
+        for (; i < level; ++i) {
+            const unsigned n = indents[i];
+            if (indent == n)
+                break;
+            if (indent < n)
+                err("inconsistent indentation");
+        }
+        if (i == maxLevel) {
+            b = a + indents[maxLevel - 1];
+            level = maxLevel;
+        } else if (i == level) { // indented deeper
+            indents[i] = indent;
+            ++level;
+        }
+    }
+
+    switch (level) {
+        case 3: goto field;
+        case 2:
+        case 1: goto record;
+        default: goto info;
+    }
+
+    // TODO: allow \r before \n
+record:
     switch (*b) {
         case ' ':
         case '\t':
-            if (!s) {
-                s = true;
-                if (b - a != 4)
-                    goto err_tag_length;
-
+            if (b - a != 4)
+                err("record tag must be 4 bytes long");
+            if (level = 1) {
+                std::array<char, 4> tag;
+                records[tag] = ;
+                // TODO: save pointer to current record def
             } else {
             }
         case '\n':
         default:
             ++b;
-            goto next;
+            goto next_line;
     }
-
-
-
-err_indent_char:
-    throw std::runtime_error("Record definition indentation must use spaces");
-err_tag_length:
-    throw std::runtime_error("Record tag must be 4 characters long");
 }

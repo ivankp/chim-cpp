@@ -1,3 +1,13 @@
-BOOK
-  TEXT
-    str Book text
+BOOK   book record 
+	TEXT    book text subrecord  
+		str Book text
+			 second line
+				third line 
+
+			fifth line
+AAAA
+	BBBB
+		a b c
+	CCCC
+		a b c
+

@@ -1,98 +1,244 @@
-#include "PosixFile.hpp"
+#include "config.hh"
 #include "strings.hpp"
 
 #include <stdexcept>
+#include <fstream>
 
-RecordDefs::RecordDefs(const char* path) {
-    WholeFile file(path);
+using strings::cat;
 
+namespace {
+
+void SkipSpace(const char*& b, const char* end) {
+next:
+    if (b != end) {
+        switch (*b) {
+            case ' ':
+            case '\t':
+                ++b;
+                goto next;
+        }
+    }
+}
+
+void SkipWord(const char*& b, const char* end) {
+next:
+    if (b != end) {
+        switch (*b) {
+            case ' ':
+            case '\t':
+            case '\r':
+            case '\n':
+                break;
+            default:
+                ++b;
+                goto next;
+        }
+    }
+}
+
+} // namespace
+
+RecDefs::RecDefs(const char* path) : file(path) {
     unsigned line = 0;
 
     const auto err = [&](auto&&... x) {
-        throw std::runtime_error(strings::cat(
+        throw std::runtime_error(cat(
             path, ':', line, ": ", x...
         ));
     };
 
-    const char* const end = f.m + f.size;
-    const char* a = f.m;
+    const char* const end = file.m + file.size;
+    const char* a = file.m;
     const char* b = a;
+    const char* lineEnd;
 
-    static constexpr unsigned maxLevel = 4;
-    unsigned level = 0, indent = 0, indents[maxLevel] = { 0 };
-    bool s = false;
+    static constexpr unsigned maxLevel = 3;
+    unsigned indent = 0;
+
+    RecTag recTag;
+    SubrecTag subTag;
+
+    std::string_view* recInfo = nullptr;
+    SubrecDef* subrec = nullptr;
+    FieldDef* field = nullptr;
 
 next_line:
     ++line;
 
-skip_space:
-    if (!(a < end))
-        goto end;
+    // Count leading tabs
+    for (;; ++b) {
+        if (b == end)
+            return;
+        if (*b != '\t')
+            break;
+    }
+    indent = b - a;
 
-    switch (*a) {
-        case ' ':
-            ++indent;
-            ++a;
-            goto skip_space;
-        case '\t':
-        case '\r': // blank character other than space
-            s = true;
-        case '\n':
-            s = false;
-            indent = 0;
-            goto next_line; // blank line
-            // TODO: if info, insert new line?
+    // Ignore blank lines
+    for (;; ++b) {
+        if (b == end)
+            return;
+        switch (*b) {
+            case '\n':
+                a = ++b;
+                goto next_line;
+            case ' ':
+            case '\t':
+            case '\r':
+                continue;
+        }
+        break;
     }
 
-    if (s)
-        err("indentation must use spaces");
-
+    if (indent > maxLevel) {
+        indent = maxLevel;
+    }
+    a += indent;
     b = a;
 
-    if (!level) {
-        indents[0] = indent;
-        level = 1;
-    } else {
-        unsigned i = 0;
-        for (; i < level; ++i) {
-            const unsigned n = indents[i];
-            if (indent == n)
-                break;
-            if (indent < n)
-                err("inconsistent indentation");
-        }
-        if (i == maxLevel) {
-            b = a + indents[maxLevel - 1];
-            level = maxLevel;
-        } else if (i == level) { // indented deeper
-            indents[i] = indent;
-            ++level;
-        }
-    }
-
-    switch (level) {
-        case 3: goto field;
-        case 2:
-        case 1: goto record;
+    switch (indent) {
+        case 0u:
+        case 1u: goto record;
+        case 2u: goto field;
         default: goto info;
     }
 
-    // TODO: allow \r before \n
 record:
-    switch (*b) {
-        case ' ':
-        case '\t':
-            if (b - a != 4)
-                err("record tag must be 4 bytes long");
-            if (level = 1) {
-                std::array<char, 4> tag;
-                records[tag] = ;
-                // TODO: save pointer to current record def
-            } else {
-            }
-        case '\n':
+    SkipWord(b, end);
+    if (b - a != 4)
+        err("record tag must be 4 bytes long");
+
+    if (!indent) {
+        std::memcpy(recTag.data(), a, 4);
+        std::memcpy(subTag.data(), a, 4);
+        recInfo = &recs[recTag];
+        subrec = nullptr;
+    } else {
+        if (!recInfo) {
+            err("subrecord without record");
+        }
+        std::memcpy(subTag.data() + 4, a, 4);
+        subrec = &subrecs[subTag];
+    }
+    field = nullptr;
+
+    SkipSpace(b, end);
+    a = b;
+
+    goto info;
+
+field:
+    if (!subrec) {
+        err("field without subrecord");
+    }
+
+    field = &subrec->fields.emplace_back();
+
+    SkipWord(b, end);
+    field->type = { a, b };
+    SkipSpace(b, end);
+    a = b;
+
+    SkipWord(b, end);
+    field->name = { a, b };
+    SkipSpace(b, end);
+    a = b;
+
+    goto info;
+
+info:
+    // find end of the line
+    if (b == end) {
+        lineEnd = b;
+    } else if (*b == '\n') {
+        lineEnd = b;
+        if (b > a && b[-1] == '\r') {
+            --lineEnd;
+        }
+    } else {
+        ++b;
+        goto info;
+    }
+    // strip trailing whitespace
+    while (--lineEnd > a) {
+        switch (*lineEnd) {
+            case ' ':
+            case '\t':
+                break;
+            default:
+                goto line_end;
+        }
+    }
+line_end:
+    ++lineEnd;
+
+    std::string_view tail(a, lineEnd);
+    switch (indent) {
+        case 0u:
+            *recInfo = tail;
+            break;
+        case 1u:
+            subrec->info = tail;
+            break;
         default:
-            ++b;
-            goto next_line;
+            if (!field) {
+                err("info without field");
+            }
+            auto& info = field->info;
+            if (indent > 2)
+                info += '\n';
+            info += tail;
+    }
+
+    if (b != end) {
+        a = ++b;
+        goto next_line;
+    }
+}
+
+void RecDefs::Write(const char* path) const {
+    std::ofstream out(path);
+    if (!out)
+        throw std::runtime_error(cat("Failed to open ", path));
+
+    auto subrec = subrecs.begin();
+    auto subEnd = subrecs.end();
+
+    for (const auto& [ recTag, recInfo ] : recs) {
+        out.write(recTag.data(), 4);
+        if (!recInfo.empty()) {
+            out << ' ' << recInfo;
+        }
+        out << '\n';
+        for (; subrec != subEnd; ++subrec) {
+            const auto& [ subTag, subDef ] = *subrec;
+            for (unsigned i = 0; i < 4; ++i) {
+                if (recTag[i] != subTag[i])
+                    goto next_tag;
+            }
+            out << '\t';
+            out.write(subTag.data() + 4, 4);
+
+            const auto& [ subInfo, fields ] = subDef;
+            if (!subInfo.empty()) {
+                out << ' ' << subInfo;
+            }
+            out << '\n';
+
+            for (const auto& field : fields) {
+                out << "\t\t" << field.type << ' ' << field.name;
+                if (!field.info.empty()) {
+                    out << ' ';
+                    for (char c : field.info) {
+                        out << c;
+                        if (c == '\n') {
+                            out << "\t\t\t";
+                        }
+                    }
+                }
+                out << '\n';
+            }
+        }
+next_tag:;
     }
 }

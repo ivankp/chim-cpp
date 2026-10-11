@@ -1,19 +1,31 @@
-#include <array>
-#include <map>
+#pragma once
+
+#include "PosixFile.hpp"
+
+#include <string>
 #include <string_view>
+#include <array>
+#include <vector>
+#include <map>
 
 struct FieldDef {
-    std::string_view type, name, info;
+    std::string_view type, name;
+    std::string info;
 };
 
-struct SubrecordDef {
+struct SubrecDef {
     std::string_view info;
     std::vector<FieldDef> fields;
 };
 
-struct RecordDefs {
-    std::map<std::array<char, 4>, std::string_view> records;
-    std::map<std::array<char, 8>, SubrecordDef> subrecords;
+using RecTag = std::array<char, 4>;
+using SubrecTag = std::array<char, 8>;
 
-    RecordDefs(const char* path);
+struct RecDefs {
+    WholeFile file;
+    std::map<RecTag, std::string_view> recs;
+    std::map<SubrecTag, SubrecDef> subrecs;
+
+    RecDefs(const char* path);
+    void Write(const char* path) const;
 };

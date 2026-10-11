@@ -26,15 +26,21 @@ bin/%: .build/%.o
 	@mkdir -p $(@D)
 	$(CXX) -std=$(CPPSTD) $(CFLAGS) -c $< -o $@
 
+.build/%.o: src/%.cc
+	@mkdir -p $(@D)
+	$(CXX) -std=$(CPPSTD) $(CFLAGS) -c $< -o $@
+
 .build/%.o: src/%.c
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) $(DEPFLAGS) -c $< -o $@
 
-bin/chim: .build/Mmapped.o .build/PosixFile.o .build/parser.o
+bin/chim: .build/Mmapped.o .build/PosixFile.o .build/parser.o .build/config.o
 
 .build/Mmapped.o: src/Mmapped.hpp src/Error.hpp src/strings.hpp
 .build/PosixFile.o: src/strings.hpp
-.build/parser.o: src/parser.hpp src/Mmapped.hpp src/Error.hpp src/strings.hpp
+.build/parser.o: src/parser.hpp src/Mmapped.hpp src/Error.hpp src/strings.hpp \
+    src/config.hh src/PosixFile.hpp
+.build/config.o: src/config.hh src/PosixFile.hpp
 
 endif ##########################################################################
 

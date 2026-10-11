@@ -99,6 +99,19 @@ struct Record {
     }
 };
 
+const char* StripNulls(const char* a, const char* end) {
+    const char* endTxt = end;
+    while (endTxt > a) {
+        if (*--endTxt != '\0') {
+            ++endTxt;
+            break;
+        }
+    }
+    if (endTxt == a && endTxt < end)
+        ++endTxt;
+    return endTxt;
+}
+
 void WriteAscii(std::ostream& out, const char* m, const char* end) {
     char c;
     for (; m < end; ++m) {
@@ -176,15 +189,74 @@ Mod::Mod(const std::filesystem::path& path) : Mmapped(path) {
                     continue;
 
                 const char* const endSub = ptr + subrecord.size;
-                if (const char* endTxt = IsAsciiText(ptr, endSub)) {
+
+                std::array<char, 8> subTag;
+                std::memcpy(subTag.data(), record.name, 4);
+                std::memcpy(subTag.data() + 4, subrecord.name, 4);
+
+                if (auto def = defs.subrecs.find(subTag);
+                    def != defs.subrecs.end()
+                ) {
+                    for (const auto& field : def->second.fields) {
+                        const auto& type = field.type;
+                        out << "  " << type;
+                        if (!field.name.empty())
+                            out << ' ' << field.name;
+                        out << "\n   ";
+                        if (type == "i4") {
+                            int32_t x;
+                            std::memcpy(&x, ptr, sizeof(x));
+                            ptr += sizeof(x);
+                            out << x;
+                        } else if (type == "i1") {
+                            int8_t x;
+                            std::memcpy(&x, ptr, sizeof(x));
+                            ptr += sizeof(x);
+                            out << int(x);
+                        } else if (type == "i2") {
+                            int16_t x;
+                            std::memcpy(&x, ptr, sizeof(x));
+                            ptr += sizeof(x);
+                            out << x;
+                        } else if (type == "i8") {
+                            int64_t x;
+                            std::memcpy(&x, ptr, sizeof(x));
+                            ptr += sizeof(x);
+                            out << x;
+                        } else if (type == "f4") {
+                            float x;
+                            std::memcpy(&x, ptr, sizeof(x));
+                            ptr += sizeof(x);
+                            out << x;
+                        } else if (type == "str") {
+                            // TODO: make sure this is the last field
+                            WriteAscii(out, ptr, StripNulls(ptr, endSub));
+                            ptr = endSub;
+                        } else if (type[0] == 's') {
+                            unsigned len;
+                            if (std::from_chars(
+                                type.data() + 1, type.data() + type.size(), len
+                            ).ec != std::errc{})
+                                throw std::runtime_error(cat(
+                                    "invalid type \"", type, '"'));
+                            const char* endTxt = ptr + len;
+                            WriteAscii(out, ptr, StripNulls(ptr, endTxt));
+                            ptr = endTxt;
+                        } else {
+                            throw std::runtime_error(cat(
+                                "unexpected type \"", type, '"'));
+                        }
+                        out << '\n';
+                    }
+                } else if (const char* endTxt = IsAsciiText(ptr, endSub)) {
                     out << "  str\n   ";
                     if (ptr != endTxt) {
                         WriteAscii(out, ptr, endTxt);
                     } else { [[ unlikely ]]
-                        out << "\\0";
+                        out << "\\00";
                     }
                     out << '\n';
-                    ptr += subrecord.size;
+                    ptr = endSub;
                 } else {
                     out << "  hex\n";
                     unsigned i = 2;

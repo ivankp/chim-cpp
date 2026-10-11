@@ -1,13 +1,132 @@
-BOOK   book record 
-	TEXT    book text subrecord  
+TES3
+	DATA size of the preceeding master file in bytes
+		i8 size
+	HEDR header
+		f4 version
+		i4 _
+		s32 companyName
+		s256 fileDescription
+		i4 numRecords
+	MAST required master file
+		str
+ACTI activator
+	FNAM name
+		str
+	MODL model name
+		str
+	NAME id
+		str
+	SCRI script name
+		str
+BOOK
+	TEXT
 		str Book text
-			 second line
-				third line 
-
-			fifth line
-AAAA
-	BBBB
-		a b c
-	CCCC
-		a b c
-
+CELL
+	FRMR object index
+		i4 index
+	NAM0
+		i4
+	NAME id
+		str
+	RGNN region
+		str
+CONT containers
+	CNDT
+		f4 weight
+	FLAG
+		i4
+	FNAM name
+		str
+	MODL NIF Model
+		str
+	NAME id
+		str
+	NPCO item
+		i4 itemCount
+		s32 itemID
+GLOB global variable
+	FLTV
+		f4 floatData
+	FNAM
+		s1 type 's'hort, 'l'ong, 'f'loat
+	NAME global variable name
+		str
+LAND
+	INTV
+		i4 CellX
+		i4 CellY
+LIGH Lights
+	FNAM name
+		str
+	ITEX icon
+		str
+	LHDT data
+		f4 Weight
+		i4 Value
+		i4 Time
+		i4 Radius
+		i1 Red
+		i1 Green
+		i1 Blue
+		i1 Null
+		i4 Flags
+			0x0001 = Dynamic
+			0x0002 = Can Carry
+			0x0004 = Negative
+			0x0008 = Flicker
+			0x0010 = Fire
+			0x0020 = Off Default
+			0x0040 = Flicker Slow
+			0x0080 = Pulse
+			0x0100 = Pulse Slow
+	MODL NIF model
+		str
+	NAME id
+		str
+	SCPT script
+		str
+	SNAM sound
+		str
+NPC_
+	ANAM faction
+		str
+	BNAM head model
+		str
+	CNAM class
+		str
+	FLAG
+		i4 flags
+			0x0001 = Female
+			0x0002 = Essential
+			0x0004 = Respawn
+			0x0008 = None?
+			0x0010 = Autocalc
+			0x0400 = Blood Skel
+			0x0800 = Blood Metal
+	FNAM name
+		str
+	KNAM hair model
+		str
+	MODL animation
+		str
+	NAME id
+		str
+	NPCO item
+		i4 itemCount
+		s32 itemID
+	NPCS spell
+		s32 spellID
+	RNAM race
+		str
+SCPT script
+	SCHD script header
+		s32 name
+		i4 numShorts
+		i4 numLongs
+		i4 numFloats
+		i4 dataSize
+		i4 localVarSize
+	SCTX script text
+		str
+	SCVR list of all script variables
+		str vars

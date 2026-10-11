@@ -226,9 +226,13 @@ void RecDefs::Write(const char* path) const {
             out << '\n';
 
             for (const auto& field : fields) {
-                out << "\t\t" << field.type << ' ' << field.name;
+                out << "\t\t" << field.type;
+                if (!field.name.empty()) {
+                    out << ' ' << field.name;
+                }
                 if (!field.info.empty()) {
-                    out << ' ';
+                    if (field.info[0] != '\n')
+                        out << ' ';
                     for (char c : field.info) {
                         out << c;
                         if (c == '\n') {

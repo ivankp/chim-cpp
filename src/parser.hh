@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Mmapped.hpp"
+#include "Mmapped.hh"
 
 class Mod : Mmapped {
 public:

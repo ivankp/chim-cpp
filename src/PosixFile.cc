@@ -1,6 +1,6 @@
-#include "PosixFile.hpp"
+#include "PosixFile.hh"
 
-#include "strings.hpp"
+#include "strings.hh"
 
 #include <cstdlib>
 #include <stdexcept>

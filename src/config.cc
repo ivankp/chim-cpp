@@ -1,5 +1,6 @@
 #include "config.hh"
-#include "strings.hpp"
+
+#include "strings.hh"
 
 #include <stdexcept>
 #include <fstream>

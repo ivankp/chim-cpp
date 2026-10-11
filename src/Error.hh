@@ -1,6 +1,6 @@
 #pragma once
 
-#include "strings.hpp"
+#include "strings.hh"
 
 #include <exception>
 

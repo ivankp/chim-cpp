@@ -1,6 +1,7 @@
-#include "parser.hpp"
-#include "PosixFile.hpp"
-#include "strings.hpp"
+#include "parser.hh"
+
+#include "PosixFile.hh"
+#include "strings.hh"
 #include "config.hh"
 
 #include <cstdio>

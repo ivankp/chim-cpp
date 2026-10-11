@@ -2,7 +2,7 @@
 
 ifeq (0, $(words $(findstring $(MAKECMDGOALS), clean))) ########################
 
-EXE := bin/chim bin/test
+EXE := chim test
 
 CPPSTD := c++23
 
@@ -16,15 +16,13 @@ LDLIBS :=
 
 .PRECIOUS: .build/%.o
 
+EXE := $(addprefix bin/,$(EXE))
+
 all: $(EXE)
 
 bin/%: .build/%.o
 	@mkdir -p $(@D)
 	$(CXX) $(LDFLAGS) $^ -o $@ $(LDLIBS)
-
-.build/%.o: src/%.cpp
-	@mkdir -p $(@D)
-	$(CXX) -std=$(CPPSTD) $(CFLAGS) -c $< -o $@
 
 .build/%.o: src/%.cc
 	@mkdir -p $(@D)
@@ -36,11 +34,11 @@ bin/%: .build/%.o
 
 bin/chim: .build/Mmapped.o .build/PosixFile.o .build/parser.o .build/config.o
 
-.build/Mmapped.o: src/Mmapped.hpp src/Error.hpp src/strings.hpp
-.build/PosixFile.o: src/strings.hpp
-.build/parser.o: src/parser.hpp src/Mmapped.hpp src/Error.hpp src/strings.hpp \
-    src/config.hh src/PosixFile.hpp
-.build/config.o: src/config.hh src/PosixFile.hpp
+.build/Mmapped.o: src/Mmapped.hh src/Error.hh src/strings.hh
+.build/PosixFile.o: src/strings.hh
+.build/parser.o: src/parser.hh src/Mmapped.hh src/Error.hh src/strings.hh \
+    src/config.hh src/PosixFile.hh
+.build/config.o: src/config.hh src/PosixFile.hh
 
 endif ##########################################################################
 

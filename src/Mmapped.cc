@@ -1,5 +1,6 @@
-#include "Mmapped.hpp"
-#include "Error.hpp"
+#include "Mmapped.hh"
+
+#include "Error.hh"
 
 #include <cstdio>
 #include <cctype>

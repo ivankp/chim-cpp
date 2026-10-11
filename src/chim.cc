@@ -1,5 +1,5 @@
-#include "parser.hpp"
-#include "strings.hpp"
+#include "parser.hh"
+#include "strings.hh"
 
 #include <filesystem>
 #include <exception>

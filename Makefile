@@ -34,7 +34,7 @@ bin .build:
 
 -include $(wildcard .build/*.d)
 
-bin/chim: .build/Mmapped.o .build/PosixFile.o .build/parser.o .build/config.o
+bin/chim: .build/file_posix.o .build/config.o .build/parser.o
 
 endif ##########################################################################
 

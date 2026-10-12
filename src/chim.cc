@@ -7,14 +7,14 @@
 
 #include <cstdio>
 
-using std::filesystem::path;
+namespace fs = std::filesystem;
 using strings::cat;
 
 namespace strings {
 template <>
-struct ViewADL<path> {
-    static auto view(const path& p) noexcept {
-        if constexpr (std::is_same_v<std::string, typename path::string_type>) {
+struct ViewADL<fs::path> {
+    static auto view(const fs::path& p) noexcept {
+        if constexpr (std::is_same_v<std::string, typename fs::path::string_type>) {
             return std::string_view(p.native());
         } else {
             return p.string();
@@ -25,14 +25,19 @@ struct ViewADL<path> {
 
 int main(int argc, char** argv) {
     try {
-        if (argc != 2) {
+        if (argc != 2 && argc != 3) {
             std::fputs(cat(
-                "usage: ", path(argv[0]).filename(), " input_file\n"
+                "usage: ", fs::path(argv[0]).filename(),
+                " input_file [output_file]\n"
             ).c_str(), stderr);
             return 1;
         }
 
-        const Mod mod(argv[1]);
+        EsToChim(
+            argv[1],
+            argc > 2 ? argv[2] :
+                fs::path(argv[1]).filename().replace_extension(".chim").c_str()
+        );
 
     } catch (...) {
         std::fputs("Terminated due to exception\n", stderr);

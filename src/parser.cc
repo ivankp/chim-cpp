@@ -1,22 +1,18 @@
 #include "parser.hh"
 
-#include "PosixFile.hh"
+#include "file_posix.hh"
 #include "strings.hh"
 #include "config.hh"
 
-#include <cstdio>
-#include <sstream>
-#include <string_view>
-#include <cstring>
-#include <iostream>
 #include <algorithm>
-#include <tuple>
+#include <cstdio>
+#include <fstream>
 #include <map>
-
-#include <unistd.h>
+#include <tuple>
 
 #include <set>
-#include <fstream>
+
+#include <unistd.h>
 
 using strings::cat;
 
@@ -52,53 +48,6 @@ const char* IsAsciiText(const char* a, const char* const end) {
             return nullptr;
     }
 }
-
-} // namespace
-
-struct Subrecord {
-    char name[4];
-    uint32_t size;
-
-    const char* ReadEs(const char* m, const char* end) {
-        if (end - m < sizeof(Subrecord))
-            throw std::runtime_error("Not enough data for subrecord header");
-        std::memcpy(this, m, sizeof(Subrecord));
-        m += sizeof(Subrecord);
-        if (end - m < size)
-            throw std::runtime_error("Not enough data for subrecord data");
-        return m;
-    }
-
-    void WriteText(std::ostream& out) const {
-        out << ' ';
-        out.write(name, sizeof(name));
-        out << ' ' << size << '\n';
-    }
-};
-
-struct Record {
-    char name[4];
-    uint32_t size;
-    uint32_t flags[2];
-
-    const char* ReadEs(const char* m, const char* end) {
-        if (end - m < sizeof(Record))
-            throw std::runtime_error("Not enough data for record header");
-        std::memcpy(this, m, sizeof(Record));
-        m += sizeof(Record);
-        if (end - m < size)
-            throw std::runtime_error("Not enough data for record data");
-        return m;
-    }
-
-    void WriteText(std::ostream& out) const {
-        out.write(name, sizeof(name));
-        out << ' ' << size << ' '
-            << std::hex
-            << flags[0] << ' ' << flags[1]
-            << std::dec << '\n';
-    }
-};
 
 const char* StripNulls(const char* a, const char* end) {
     const char* endTxt = end;
@@ -156,23 +105,76 @@ next:
     }
 }
 
+} // namespace
+
+struct Subrecord {
+    char name[4];
+    uint32_t size;
+
+    const char* ReadEs(const char* m, const char* end) {
+        if (end - m < (std::ptrdiff_t)sizeof(Subrecord))
+            throw std::runtime_error("Not enough data for subrecord header");
+        std::memcpy(this, m, sizeof(Subrecord));
+        m += sizeof(Subrecord);
+        if (end - m < size)
+            throw std::runtime_error("Not enough data for subrecord data");
+        return m;
+    }
+
+    void WriteText(std::ostream& out) const {
+        out << ' ';
+        out.write(name, sizeof(name));
+        out << ' ' << size << '\n';
+    }
+};
+
+struct Record {
+    char name[4];
+    uint32_t size;
+    uint32_t flags[2];
+
+    const char* ReadEs(const char* m, const char* end) {
+        if (end - m < (std::ptrdiff_t)sizeof(Record))
+            throw std::runtime_error("Not enough data for record header");
+        std::memcpy(this, m, sizeof(Record));
+        m += sizeof(Record);
+        if (end - m < size)
+            throw std::runtime_error("Not enough data for record data");
+        return m;
+    }
+
+    void WriteText(std::ostream& out) const {
+        out.write(name, sizeof(name));
+        out << ' ' << size << ' '
+            << std::hex
+            << flags[0] << ' ' << flags[1]
+            << std::dec << '\n';
+    }
+};
+
 std::map<std::string, std::set<std::string>> tags;
 
-Mod::Mod(const std::filesystem::path& path) : Mmapped(path) {
+void EsToChim(const char* inEsPath, const char* outChimPath) {
+    std::ofstream out(outChimPath);
+    if (!out)
+        throw std::runtime_error(cat(
+            "Failed to open \"", outChimPath, '"'));
+
+    MappedFile in(inEsPath);
+
     char hexLine[8 * (8 + 1) + 3];
     std::memset(hexLine, ' ', sizeof(hexLine)-1);
     hexLine[sizeof(hexLine) - 1] = '\n';
 
-    // TODO: move somewhere
-    RecDefs defs("TES3.recs");
-    defs.Write("TES3-test.recs");
+    if (std::string_view(in.m, in.size).starts_with("TES3")) {
+        // TODO: move somewhere
+        RecDefs defs("TES3.recs");
+        defs.Write("TES3-test.recs");
 
-    std::stringstream out; // TODO: change to ofstream
-    if (std::string_view(m, size).starts_with("TES3")) {
         Record record;
         Subrecord subrecord;
-        const char *ptr = m;
-        const char* const endFile = m + size;
+        const char *ptr = in.m;
+        const char* const endFile = in.m + in.size;
         while (ptr < endFile) {
             ptr = record.ReadEs(ptr, endFile);
             record.WriteText(out);
@@ -280,8 +282,6 @@ Mod::Mod(const std::filesystem::path& path) : Mmapped(path) {
             }
         }
     }
-    const auto view = out.rdbuf()->view();
-    write(1, view.data(), view.size());
 
     std::ofstream tagsOut("tags.txt");
     for (const auto& [rec, subs] : tags) {

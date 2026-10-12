@@ -8,37 +8,33 @@ CPPSTD := c++23
 
 CFLAGS := -Wall -Wextra -Wpedantic -fmax-errors=3
 # CFLAGS := -Og -g # Debug
-CFLAGS := -O3 -flto -march=native -DNDEBUG # Release
+CFLAGS += -O3 -flto -march=native -DNDEBUG # Release
 CFLAGS += -Isrc
+
+DEPFLAGS := -MMD -MP
 
 LDFLAGS :=
 LDLIBS :=
 
 .PRECIOUS: .build/%.o
 
-EXE := $(addprefix bin/,$(EXE))
+all: $(addprefix bin/,$(EXE))
 
-all: $(EXE)
-
-bin/%: .build/%.o
-	@mkdir -p $(@D)
+bin/%: .build/%.o | bin
 	$(CXX) $(LDFLAGS) $^ -o $@ $(LDLIBS)
 
-.build/%.o: src/%.cc
-	@mkdir -p $(@D)
-	$(CXX) -std=$(CPPSTD) $(CFLAGS) -c $< -o $@
+.build/%.o: src/%.cc | .build
+	$(CXX) -std=$(CPPSTD) $(CFLAGS) $(DEPFLAGS) -c $< -o $@
 
-.build/%.o: src/%.c
-	@mkdir -p $(@D)
+.build/%.o: src/%.c | .build
 	$(CC) $(CFLAGS) $(DEPFLAGS) -c $< -o $@
 
-bin/chim: .build/Mmapped.o .build/PosixFile.o .build/parser.o .build/config.o
+bin .build:
+	mkdir -p $@
 
-.build/Mmapped.o: src/Mmapped.hh src/Error.hh src/strings.hh
-.build/PosixFile.o: src/strings.hh
-.build/parser.o: src/parser.hh src/Mmapped.hh src/Error.hh src/strings.hh \
-    src/config.hh src/PosixFile.hh
-.build/config.o: src/config.hh src/PosixFile.hh
+-include $(wildcard .build/*.d)
+
+bin/chim: .build/Mmapped.o .build/PosixFile.o .build/parser.o .build/config.o
 
 endif ##########################################################################
 
